@@ -1,0 +1,28 @@
+{
+  "labels": [
+    "burping",
+    "needs",
+    "physical_pain",
+    "scared"
+  ],
+  "label_to_id": {
+    "burping": 0,
+    "needs": 1,
+    "physical_pain": 2,
+    "scared": 3
+  },
+  "id_to_label": {
+    "0": "burping",
+    "1": "needs",
+    "2": "physical_pain",
+    "3": "scared"
+  },
+  "merged_from": {
+    "scared": "scared",
+    "belly_pain": "physical_pain",
+    "hungry": "needs",
+    "tired": "needs",
+    "discomfort": "needs",
+    "burping": "burping"
+  }
+}

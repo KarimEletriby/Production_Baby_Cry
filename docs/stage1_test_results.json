@@ -1,0 +1,12 @@
+{
+  "task": "Stage 1 \u2014 binary baby_cry detection",
+  "best_ckpt": "/content/drive/MyDrive/BabyCryProject/runs/stage1_v2_binary_v2/checkpoints/05-vf10.0000.ckpt",
+  "test_accuracy": 0.9942010309278351,
+  "test_macro_f1": 0.9937164380733109,
+  "test_roc_auc": 0.9982664890552996,
+  "test_per_class_f1": {
+    "baby_cry": 0.9954614220877458,
+    "not_baby_cry": 0.991971454058876
+  },
+  "wrong_confident_pct": 1.0
+}

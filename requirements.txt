@@ -1,0 +1,19 @@
+# Production requirements for Baby Cry Classifier inference
+torch>=2.0.0
+pytorch-lightning==2.4.0
+transformers==4.44.2
+torchmetrics==1.4.2
+soundfile>=0.12.1
+librosa>=0.10.0
+numpy>=1.24.0
+
+# Optional for FastAPI backend
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
+
+echo. >> requirements.txt
+echo # Phase 1 production hardening >> requirements.txt
+echo slowapi>=0.1.9 >> requirements.txt
+echo structlog>=24.1.0 >> requirements.txt
+echo python-json-logger>=2.0.7 >> requirements.txt

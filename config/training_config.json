@@ -1,0 +1,44 @@
+{
+  "audio": {
+    "sample_rate": 16000,
+    "chunk_seconds": 5.0,
+    "chunk_samples": 80000,
+    "mono": true
+  },
+  "stage2": {
+    "task": "multiclass_classification",
+    "labels": [
+      "burping",
+      "needs",
+      "physical_pain",
+      "scared"
+    ],
+    "class_weights": [
+      2.0747464171517103,
+      0.20254226530616087,
+      0.8105790658102835,
+      0.9121322517318452
+    ],
+    "n_classes": 4,
+    "merged_from": {
+      "scared": "scared",
+      "belly_pain": "physical_pain",
+      "hungry": "needs",
+      "tired": "needs",
+      "discomfort": "needs",
+      "burping": "burping"
+    }
+  },
+  "stage1": {
+    "task": "binary_classification",
+    "labels": [
+      "baby_cry",
+      "not_baby_cry"
+    ],
+    "class_weights": [
+      0.7306197586418491,
+      1.269380241358151
+    ],
+    "n_classes": 2
+  }
+}

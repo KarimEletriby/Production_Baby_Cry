@@ -1,0 +1,14 @@
+{
+  "labels": [
+    "baby_cry",
+    "not_baby_cry"
+  ],
+  "label_to_id": {
+    "baby_cry": 0,
+    "not_baby_cry": 1
+  },
+  "id_to_label": {
+    "0": "baby_cry",
+    "1": "not_baby_cry"
+  }
+}

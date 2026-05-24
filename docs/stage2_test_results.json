@@ -1,0 +1,19 @@
+{
+  "task": "Stage 2 \u2014 4-class with label smoothing",
+  "best_ckpt": "/content/drive/MyDrive/BabyCryProject/runs/stage2_v2_4class/checkpoints/07-vf10.0000.ckpt",
+  "best_val_f1": 0.7894,
+  "test_accuracy": 0.842741935483871,
+  "test_macro_f1": 0.7684659536414711,
+  "test_per_class_f1": {
+    "burping": 0.5384615384615384,
+    "needs": 0.8813825608798115,
+    "physical_pain": 0.6867469879518072,
+    "scared": 0.9672727272727273
+  },
+  "per_source_f1": {
+    "baby_crying": 0.7820408611074113,
+    "infant_cry_corpus": 0.38291724456773,
+    "baby_sounds": 0.5003422425032594
+  },
+  "wrong_confident_pct": 0.11538461538461539
+}
