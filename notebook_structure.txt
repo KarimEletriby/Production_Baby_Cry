@@ -1,0 +1,676 @@
+﻿=== Cell 0 [MARKDOWN] ===
+STEP 1: Load and Prepare Datasets
+
+=== Cell 1 [CODE] (18 lines) ===
+# =========================================================
+# STEP 1: Load and Prepare Datasets
+# =========================================================
+
+=== Cell 2 [CODE] (14 lines) ===
+# ---- 1.3 Setup Kaggle API ----
+# Upload your kaggle.json (from https://www.kaggle.com/settings -> Create New API Token)
+from google.colab import files
+
+=== Cell 3 [CODE] (21 lines) ===
+# ---- 1.4 Download the 3 datasets ----
+DATASETS = {
+    'infant_cry_corpus' : 'warcoder/infant-cry-audio-corpus',         # Stage 2
+
+=== Cell 4 [CODE] (38 lines) ===
+# ---- 1.5 Build initial dataframe ----
+import pandas as pd
+from pathlib import Path
+
+=== Cell 5 [MARKDOWN] ===
+STEP 2: Standardize Labels
+
+=== Cell 6 [CODE] (83 lines) ===
+# =========================================================
+# STEP 2 (REVISED): Standardize Labels ظ¤ Drop `lonely`
+# =========================================================
+
+=== Cell 7 [MARKDOWN] ===
+STEP 3: Filter Classes
+
+=== Cell 8 [CODE] (71 lines) ===
+# =========================================================
+# STEP 3: Filter Classes (Allow-list + Stage Tagging)
+# =========================================================
+
+=== Cell 9 [MARKDOWN] ===
+STEP 4: Merge Datasets + Reserve Held-out Test Set + Add ESC-50
+
+=== Cell 10 [CODE] (61 lines) ===
+# =========================================================
+# STEP 4 (part 1): Merge + Reserve Test Set
+# =========================================================
+
+=== Cell 11 [CODE] (20 lines) ===
+# ---- 4.3 Download ESC-50 ----
+ESC50_DIR = os.path.join(PROJECT_DIR, 'datasets_raw', 'esc50')
+
+=== Cell 12 [CODE] (76 lines) ===
+# ---- 4.4 EXCLUDE ESC-50 categories that overlap with our task ----
+# We must remove any category that sounds like a baby cry OR human vocalization
+# (otherwise we'd be telling the model "this human sound = NOT cry", which is wrong).
+
+=== Cell 13 [MARKDOWN] ===
+STEP 5: Audio Standardization (HuBERT-Ready)
+
+=== Cell 14 [CODE] (5 lines) ===
+# =========================================================
+# STEP 5: Audio Standardization (HuBERT-ready)
+# =========================================================
+
+=== Cell 15 [CODE] (28 lines) ===
+import os, traceback
+import numpy as np
+import pandas as pd
+
+=== Cell 16 [CODE] (85 lines) ===
+# ---- High-pass filter (50 Hz) ----
+def highpass_filter(y, sr, cutoff=HPF_CUTOFF_HZ, order=4):
+    sos = butter(order, cutoff, btype='highpass', fs=sr, output='sos')
+
+=== Cell 17 [CODE] (70 lines) ===
+# ---- Load Step 4 manifest ----
+df = pd.read_csv(os.path.join(META_DIR, 'metadata_step4_merged.csv'))
+print(f"≡اôح Loaded {len(df)} files to process")
+
+=== Cell 18 [MARKDOWN] ===
+STEP 6: Remove Bad Data (Production-Grade Cleaning)
+
+=== Cell 19 [CODE] (21 lines) ===
+# =========================================================
+# STEP 6: Remove Bad Data (corrupt + short + dedup)
+# =========================================================
+
+=== Cell 20 [CODE] (15 lines) ===
+# ---- 6.1 Remove processing failures ----
+before = len(df)
+df = df[df['status'].isin(['ok', 'skipped_cached'])].reset_index(drop=True)
+
+=== Cell 21 [CODE] (6 lines) ===
+# ---- 6.3 Filename duplicates (same source file listed twice) ----
+before = len(df)
+dup_mask = df.duplicated(subset=['file_path'], keep='first')
+
+=== Cell 22 [CODE] (30 lines) ===
+# ---- 6.4 Audio fingerprint deduplication ----
+# Compute a perceptual hash of each file ظْ group near-duplicates ظْ keep best representative.
+def fingerprint(wav_path, n_mfcc=13, quantize=2):
+
+=== Cell 23 [CODE] (46 lines) ===
+# ---- 6.5 Group by fingerprint and resolve duplicates ----
+df_fp     = df[df['fingerprint'].notna()].copy()
+df_no_fp  = df[df['fingerprint'].isna()].copy()
+
+=== Cell 24 [CODE] (42 lines) ===
+# ---- 6.7 Resolve duplicates: keep test if present, else keep first pool ----
+def resolve(group):
+    if len(group) == 1:
+
+=== Cell 25 [MARKDOWN] ===
+STEP 6b: Speaker-Aware Integrity Check
+
+=== Cell 26 [CODE] (22 lines) ===
+# =========================================================
+# STEP 6b: Speaker-Aware Integrity Check
+# =========================================================
+
+=== Cell 27 [CODE] (41 lines) ===
+# ---- Regex patterns for speaker/baby ID extraction ----
+# We try patterns from most specific to most generic.
+SPEAKER_PATTERNS = [
+
+=== Cell 28 [CODE] (27 lines) ===
+# ---- Detect speakers that cross pool/test ----
+speaker_splits = df.groupby('speaker_id')['split'].agg(set)
+crossing = speaker_splits[speaker_splits.apply(lambda s: len(s) > 1)]
+
+=== Cell 29 [CODE] (50 lines) ===
+# ---- Resolve speaker leakage ----
+# For each crossing speaker: assign all their files to a single split.
+# Preference: keep speaker in 'pool' UNLESS the test set has a clear majority of their files
+
+=== Cell 30 [CODE] (11 lines) ===
+# ---- Save Step 6b output ----
+out_csv = os.path.join(META_DIR, 'metadata_step6b_speaker_aware.csv')
+df.to_csv(out_csv, index=False)
+
+=== Cell 31 [MARKDOWN] ===
+STEP 7: Data Analysis & Visualization
+
+=== Cell 32 [CODE] (22 lines) ===
+# =========================================================
+# STEP 7: Data Analysis & Visualization
+# =========================================================
+
+=== Cell 33 [CODE] (34 lines) ===
+# ---- 7.1 Stage 1 distribution (baby_cry vs not_baby_cry) ----
+df['stage1_label'] = df['stage'].map({
+    'stage2_cry'    : 'baby_cry',
+
+=== Cell 34 [CODE] (18 lines) ===
+# ---- 7.2 Imbalance ratios ----
+print("="*60)
+print("ظأûي╕  IMBALANCE ANALYSIS")
+
+=== Cell 35 [CODE] (36 lines) ===
+# ---- 7.3 Duration statistics ----
+print("="*60)
+print("ظ▒ي╕  DURATION ANALYSIS (seconds)")
+
+=== Cell 36 [CODE] (29 lines) ===
+# ---- 7.4 Per-source contribution per class ----
+src_per_class = (
+    pool.groupby(['label', 'source_dataset']).size()
+
+=== Cell 37 [CODE] (26 lines) ===
+# ---- 7.5 Speaker analysis ----
+print("="*60)
+print("≡اùثي╕  SPEAKER ANALYSIS (pool)")
+
+=== Cell 38 [CODE] (31 lines) ===
+# ---- 7.6 Mel-spectrogram sanity check ----
+# Pick 2 random samples per class and visualize. Confirms preprocessing didn't break anything.
+def plot_melspec(ax, wav_path, title):
+
+=== Cell 39 [MARKDOWN] ===
+STEP 8: Build Final Datasets (Stage 1 + Stage 2)
+
+=== Cell 40 [CODE] (25 lines) ===
+# =========================================================
+# STEP 8: Build Final Datasets (Stage 1 + Stage 2)
+# =========================================================
+
+=== Cell 41 [CODE] (47 lines) ===
+# ---- Speaker-aware stratified split ----
+def speaker_aware_split(pool_df, val_size=0.20, seed=SEED, max_attempts=20):
+    """
+
+=== Cell 42 [CODE] (27 lines) ===
+# ---- 8.1 Split pool ظْ train/val (speaker-aware, stratified by label) ----
+pool = df[df['split'] == 'pool'].copy()
+test = df[df['split'] == 'test'].copy()
+
+=== Cell 43 [CODE] (34 lines) ===
+# ---- 8.2 Stage 1: baby_cry vs not_baby_cry (silence merged into not_baby_cry) ----
+df_s1 = df_full.copy()
+
+=== Cell 44 [CODE] (20 lines) ===
+# ---- 8.3 Stage 2: 6-class cry classification (cry data only) ----
+df_s2 = df_full[df_full['stage'] == 'stage2_cry'].copy().reset_index(drop=True)
+df_s2['target'] = df_s2['label']  # already standardized
+
+=== Cell 45 [CODE] (17 lines) ===
+# ---- 8.4 Per-file chunking metadata (for sampler + dataloader) ----
+def add_chunking_meta(df_in):
+    out = df_in.copy()
+
+=== Cell 46 [CODE] (84 lines) ===
+# ---- 8.5 Save Stage 1 & Stage 2 final manifests ----
+# Keep only columns we need downstream (lean manifest)
+KEEP_COLS = [
+
+=== Cell 47 [MARKDOWN] ===
+STEP 9: Save Clean Data (Organized Release Folder)
+
+=== Cell 48 [CODE] (32 lines) ===
+# =========================================================
+# STEP 9: Save Clean Data (Release Folder)
+# =========================================================
+
+=== Cell 49 [CODE] (35 lines) ===
+# ---- 9.1 Determine the canonical set of files to copy ----
+# Use stage1_manifest.csv as the master list (it contains ALL clean files).
+master = pd.read_csv(os.path.join(FINAL_DIR, 'stage1_manifest.csv'))
+
+=== Cell 50 [CODE] (27 lines) ===
+# ---- 9.3 Convert absolute paths ظْ relative paths in all manifests ----
+# Inside the release folder, audio is at audio/<uid>.wav
+def to_relative(absolute_path):
+
+=== Cell 51 [CODE] (11 lines) ===
+# ---- 9.4 Copy config + encoders ----
+config_files = [
+    'stage1_label_encoder.json',
+
+=== Cell 52 [CODE] (22 lines) ===
+# ---- 9.5 Manifest checksum (lightweight integrity check) ----
+def file_checksum(path, chunk=8192):
+    h = hashlib.sha256()
+
+=== Cell 53 [CODE] (143 lines) ===
+# ---- 9.6 Generate README.md (dataset card) ----
+s1_train = pd.read_csv(os.path.join(RELEASE_META, 'stage1_train.csv'))
+s1_val   = pd.read_csv(os.path.join(RELEASE_META, 'stage1_val.csv'))
+
+=== Cell 54 [CODE] (28 lines) ===
+# ---- 9.7 Final summary ----
+print("="*60)
+print(f"ظ£à RELEASE {RELEASE_VERSION} COMPLETE")
+
+=== Cell 55 [MARKDOWN] ===
+STEP T1: PyTorch Dataset + DataLoader for HuBERT
+
+=== Cell 56 [CODE] (8 lines) ===
+# =========================================================
+# STEP T1: Dataset + DataLoader for HuBERT
+# =========================================================
+
+=== Cell 57 [CODE] (26 lines) ===
+import os, json, random
+from pathlib import Path
+import numpy as np
+
+=== Cell 58 [CODE] (7 lines) ===
+# Pre-load the feature extractor (handles normalization)
+# Cached locally ظ¤ first run downloads ~100KB.
+feature_extractor = AutoFeatureExtractor.from_pretrained(HUBERT_MODEL)
+
+=== Cell 59 [CODE] (97 lines) ===
+class BabyCryDataset(Dataset):
+    """
+    PyTorch Dataset for baby cry audio classification.
+
+=== Cell 60 [CODE] (50 lines) ===
+class BabyCryDataModule(pl.LightningDataModule):
+    """
+    Lightning DataModule for either Stage 1 or Stage 2.
+
+=== Cell 61 [CODE] (30 lines) ===
+# ---- Quick verification: instantiate, load one batch, check shapes ----
+dm = BabyCryDataModule(stage='stage2', batch_size=8, num_workers=2)
+dm.setup()
+
+=== Cell 62 [MARKDOWN] ===
+STEP T2: HuBERT Model Wrapper (Lightning Module)
+
+=== Cell 63 [CODE] (12 lines) ===
+# =========================================================
+# STEP T2: HuBERT Model Wrapper (Lightning Module)
+# =========================================================
+
+=== Cell 64 [CODE] (196 lines) ===
+class HubertClassifier(pl.LightningModule):
+    """
+    HuBERT + classification head for baby cry classification.
+
+=== Cell 65 [CODE] (34 lines) ===
+# ---- Build the model and run one forward pass ----
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"≡اûحي╕  Device: {device}")
+
+=== Cell 66 [MARKDOWN] ===
+STEP T3: Training Loop (PyTorch Lightning Trainer)
+
+=== Cell 67 [CODE] (20 lines) ===
+# =========================================================
+# STEP T3: Training Loop
+# =========================================================
+
+=== Cell 68 [CODE] (54 lines) ===
+# ---- Run identifier (timestamped, version-friendly) ----
+RUN_NAME = f"stage2_baseline_{time.strftime('%Y%m%d_%H%M%S')}"
+RUN_DIR  = RUNS_DIR / RUN_NAME
+
+=== Cell 69 [CODE] (30 lines) ===
+# ---- Callbacks ----
+ckpt_cb = ModelCheckpoint(
+    dirpath        = RUN_DIR / 'checkpoints',
+
+=== Cell 70 [CODE] (34 lines) ===
+trainer = pl.Trainer(
+    max_epochs           = HP['max_epochs'],
+    accelerator          = 'gpu',
+
+=== Cell 71 [CODE] (60 lines) ===
+# =========================================================
+# FIX: BabyCryDataModule.setup signature
+# =========================================================
+
+=== Cell 72 [CODE] (34 lines) ===
+# ---- Status check: what's actually saved? ----
+from pathlib import Path
+
+=== Cell 73 [CODE] (60 lines) ===
+# =========================================================
+# DIAGNOSTIC: Check what really happened in the training run
+# =========================================================
+
+=== Cell 74 [CODE] (121 lines) ===
+# =========================================================
+# FINAL CLEANUP: Test eval + session notes
+# =========================================================
+
+=== Cell 75 [CODE] (33 lines) ===
+# =========================================================
+# RESUME: Sanity check
+# =========================================================
+
+=== Cell 76 [CODE] (4 lines) ===
+import torch
+print(f"GPU available: {torch.cuda.is_available()}")
+if torch.cuda.is_available():
+
+=== Cell 77 [CODE] (5 lines) ===
+!pip install -q transformers==4.44.2 \
+                pytorch-lightning==2.4.0 \
+                torchmetrics==1.4.2 \
+
+=== Cell 78 [CODE] (30 lines) ===
+import os, json, random
+from pathlib import Path
+import numpy as np
+
+=== Cell 79 [CODE] (55 lines) ===
+class BabyCryDataset(Dataset):
+    def __init__(self, manifest_csv, release_dir, feature_extractor,
+                 chunk_samples=CHUNK_SAMPLES, mode='train'):
+
+=== Cell 80 [CODE] (35 lines) ===
+class BabyCryDataModule(pl.LightningDataModule):
+    def __init__(self, stage='stage2', batch_size=8, num_workers=2):
+        super().__init__()
+
+=== Cell 81 [CODE] (165 lines) ===
+# =========================================================
+# Cell E: HubertClassifier (Lightning Module)
+# =========================================================
+
+=== Cell 82 [CODE] (17 lines) ===
+# ---- Setup DataModule ----
+dm = BabyCryDataModule(stage='stage2', batch_size=8, num_workers=2)
+dm.setup()
+
+=== Cell 83 [MARKDOWN] ===
+≡ا¤ش STEP T4 ظ¤ Phase 1: Diagnostic Analysis
+
+=== Cell 84 [CODE] (40 lines) ===
+# =========================================================
+# T4 PHASE 1: DIAGNOSTIC ANALYSIS
+# =========================================================
+
+=== Cell 85 [CODE] (41 lines) ===
+# ---- 1. Confusion matrix with row+col percentages ----
+cm = confusion_matrix(all_targets, all_preds)
+cm_row = cm / cm.sum(axis=1, keepdims=True)         # recall view
+
+=== Cell 86 [CODE] (47 lines) ===
+# ---- 2. Confidence analysis ----
+# Critical for production: if model is wrong but uncertain ظْ we can use a threshold to abstain.
+# If model is wrong AND confident ظْ that's a serious problem.
+
+=== Cell 87 [CODE] (34 lines) ===
+# ---- 3. Errors by source dataset ----
+test_df = pd.read_csv(MANIFEST_DIR / 'stage2_test.csv')
+test_df = test_df.set_index('uid')
+
+=== Cell 88 [CODE] (98 lines) ===
+# ---- 4. Duration shortcut probe ----
+# Hypothesis: scared class is 96% F1 because of duration cap (ظëج4s).
+# Test: time-stretch scared clips by ┬▒30% (changes duration, preserves pitch & timbre).
+
+=== Cell 89 [MARKDOWN] ===
+STEP T4 ظ¤ Phase 2: Architectural Fixes
+
+=== Cell 90 [CODE] (64 lines) ===
+# =========================================================
+# T4 PHASE 2: ARCHITECTURAL FIXES
+# Step 1: Save baseline as reference
+
+=== Cell 91 [CODE] (25 lines) ===
+# ---- Add label smoothing capability to the model ----
+# We'll subclass the existing HubertClassifier rather than rewrite it.
+
+=== Cell 92 [CODE] (63 lines) ===
+import time
+import numpy as np
+import torch
+
+=== Cell 93 [CODE] (70 lines) ===
+# ---- Callbacks ----
+ckpt_cb = ModelCheckpoint(
+    dirpath        = RUN_DIR / 'checkpoints',
+
+=== Cell 94 [CODE] (130 lines) ===
+# =========================================================
+# T4 PHASE 2: Test evaluation + side-by-side comparison
+# =========================================================
+
+=== Cell 95 [CODE] (33 lines) ===
+# =========================================================
+# STORAGE AUDIT: see what's where, sorted by size
+# =========================================================
+
+=== Cell 96 [CODE] (62 lines) ===
+# =========================================================
+# DRIVE CLEANUP ظ¤ Safety-verified deletion
+# =========================================================
+
+=== Cell 97 [MARKDOWN] ===
+≡ا» Path C: Clean Experiment ظ¤ Only Label Smoothing
+
+=== Cell 98 [CODE] (67 lines) ===
+# =========================================================
+# T4 PATH C: ONLY LABEL SMOOTHING (clean experiment)
+# =========================================================
+
+=== Cell 99 [CODE] (23 lines) ===
+# =========================================================
+# Read session notes (robust to both old & new formats)
+# =========================================================
+
+=== Cell 100 [CODE] (118 lines) ===
+# =========================================================
+# Step 2: Rebuild Stage 2 manifests with 4 classes
+# =========================================================
+
+=== Cell 101 [CODE] (34 lines) ===
+# =========================================================
+# Step 3: Verify new manifests
+# =========================================================
+
+=== Cell 102 [CODE] (8 lines) ===
+# =========================================================
+# 4-CLASS STAGE 2 TRAINING ظ¤ Fresh GPU session
+# =========================================================
+
+=== Cell 103 [CODE] (34 lines) ===
+import os, json, random, time
+from pathlib import Path
+import numpy as np
+
+=== Cell 104 [CODE] (89 lines) ===
+class BabyCryDataset(Dataset):
+    def __init__(self, manifest_csv, release_dir, feature_extractor,
+                 chunk_samples=CHUNK_SAMPLES, mode='train'):
+
+=== Cell 105 [CODE] (107 lines) ===
+class HubertClassifier(pl.LightningModule):
+    def __init__(self, num_classes, class_weights=None,
+                 hubert_model=HUBERT_MODEL, head_hidden_dim=256, dropout=0.1,
+
+=== Cell 106 [CODE] (36 lines) ===
+import shutil, os
+from google.colab import drive
+
+=== Cell 107 [CODE] (8 lines) ===
+# Re-mount Drive in the new GPU runtime
+from google.colab import drive
+drive.mount('/content/drive')
+
+=== Cell 108 [CODE] (79 lines) ===
+from pytorch_lightning.callbacks import (
+    ModelCheckpoint, EarlyStopping, LearningRateMonitor, RichProgressBar
+)
+
+=== Cell 109 [CODE] (36 lines) ===
+# =========================================================
+# Resume ظ¤ verify state
+# =========================================================
+
+=== Cell 110 [CODE] (219 lines) ===
+# =========================================================
+# RESUME: Setup + redefine classes
+# =========================================================
+
+=== Cell 111 [CODE] (121 lines) ===
+# =========================================================
+# Test evaluation on epoch 7 best checkpoint
+# =========================================================
+
+=== Cell 112 [CODE] (20 lines) ===
+# =========================================================
+# FREE WINS: Ensemble + Threshold Optimization
+# Step 1: List available checkpoints
+
+=== Cell 113 [CODE] (9 lines) ===
+# Quick memory check before Cell 2
+try:
+    print(f"ظ£à DataModule alive: {len(dm.ds_test)} test files")
+
+=== Cell 114 [CODE] (62 lines) ===
+# =========================================================
+# Step 2: Run inference with each checkpoint, store probabilities
+# =========================================================
+
+=== Cell 115 [CODE] (94 lines) ===
+# =========================================================
+# Step 3: Ensemble averaging + threshold optimization
+# =========================================================
+
+=== Cell 116 [CODE] (87 lines) ===
+# =========================================================
+# Step 4: Save final predictions, confusion matrix, weights
+# =========================================================
+
+=== Cell 117 [MARKDOWN] ===
+≡اْ╗ Stage 1 Training ظ¤ Single Run
+
+=== Cell 118 [CODE] (66 lines) ===
+# =========================================================
+# STAGE 1 TRAINING ظ¤ Binary baby_cry vs not_baby_cry
+# =========================================================
+
+=== Cell 119 [CODE] (38 lines) ===
+# ---- Callbacks ----
+ckpt_cb = ModelCheckpoint(
+    dirpath=RUN_DIR / 'checkpoints',
+
+=== Cell 120 [CODE] (70 lines) ===
+# =========================================================
+# Save session state before closing
+# =========================================================
+
+=== Cell 121 [CODE] (30 lines) ===
+# =========================================================
+# RESUME: Mount + Verify state
+# =========================================================
+
+=== Cell 122 [CODE] (227 lines) ===
+# =========================================================
+# STEP 2: Install + Imports + Classes (one-shot setup)
+# =========================================================
+
+=== Cell 123 [CODE] (44 lines) ===
+# =========================================================
+# STEP 3a: Copy audio Drive ظْ local SSD (one-time, ~3-5 min)
+# =========================================================
+
+=== Cell 124 [CODE] (33 lines) ===
+# =========================================================
+# STEP 3b: Rewrite manifests to use local audio paths
+# =========================================================
+
+=== Cell 125 [CODE] (31 lines) ===
+# =========================================================
+# Audit Drive storage
+# =========================================================
+
+=== Cell 126 [CODE] (104 lines) ===
+# =========================================================
+# DRIVE CLEANUP ظ¤ verified safe deletion
+# =========================================================
+
+=== Cell 127 [CODE] (24 lines) ===
+# =========================================================
+# Force-empty trash + recheck
+# =========================================================
+
+=== Cell 128 [MARKDOWN] ===
+≡اْ╗ Stage 1 Cell 1: Build Run + DataModule + Model
+
+=== Cell 129 [CODE] (77 lines) ===
+# =========================================================
+# STAGE 1 TRAINING ظ¤ Binary baby_cry vs not_baby_cry
+# =========================================================
+
+=== Cell 130 [CODE] (45 lines) ===
+from pytorch_lightning.callbacks import (
+    ModelCheckpoint, EarlyStopping, LearningRateMonitor, RichProgressBar
+)
+
+=== Cell 131 [CODE] (108 lines) ===
+# =========================================================
+# Stage 1 ظ¤ Test evaluation (with all imports)
+# =========================================================
+
+=== Cell 132 [CODE] (11 lines) ===
+from google.colab import drive
+drive.mount('/content/drive')
+
+=== Cell 133 [CODE] (17 lines) ===
+import os
+from pathlib import Path
+
+=== Cell 134 [MARKDOWN] ===
+karimeletriby15@gmail.com
+
+=== Cell 135 [CODE] (222 lines) ===
+# =========================================================
+# Account B: Fresh setup
+# =========================================================
+
+=== Cell 136 [CODE] (21 lines) ===
+# =========================================================
+# Setup DataModule + locate checkpoint
+# =========================================================
+
+=== Cell 137 [CODE] (94 lines) ===
+# =========================================================
+# Stage 1 ظ¤ Test evaluation (the moment of truth)
+# =========================================================
+
+=== Cell 138 [CODE] (30 lines) ===
+from pathlib import Path
+
+PROJECT_DIR = Path('/content/drive/MyDrive/BabyCryProject')
+
+=== Cell 139 [MARKDOWN] ===
+Build the Demo
+
+=== Cell 140 [CODE] (83 lines) ===
+# =========================================================
+# Inline tester ظ¤ upload audio, see prediction
+# =========================================================
+
+=== Cell 141 [CODE] (80 lines) ===
+# =========================================================
+# Build local-ready backend package on Drive
+# =========================================================
+
+=== Cell 142 [CODE] (257 lines) ===
+# =========================================================
+# Write production-ready inference code
+# =========================================================
+
+=== Cell 143 [CODE] (145 lines) ===
+# =========================================================
+# Add requirements.txt and README for the package
+# =========================================================
+
+=== Cell 144 [CODE] (0 lines) ===
+
+

@@ -12,8 +12,7 @@ fastapi>=0.110.0
 uvicorn>=0.29.0
 python-multipart>=0.0.9
 
-echo. >> requirements.txt
-echo # Phase 1 production hardening >> requirements.txt
-echo slowapi>=0.1.9 >> requirements.txt
-echo structlog>=24.1.0 >> requirements.txt
-echo python-json-logger>=2.0.7 >> requirements.txt
+# Phase 1 production hardening
+slowapi>=0.1.9
+structlog>=24.1.0
+python-json-logger>=2.0.7

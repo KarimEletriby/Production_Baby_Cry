@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    container_name: babycry_api
+    ports:
+      - "8501:8501"
+    restart: always
+    environment:
+      - ENV=production
