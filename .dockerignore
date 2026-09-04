@@ -9,7 +9,10 @@ env/
 venv/
 .env
 .venv/
+kaggle.json
 .DS_Store
 *.md
 *.pdf
 *.docx
+Test records/
+Test records.zip

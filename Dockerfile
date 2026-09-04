@@ -21,6 +21,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 COPY . .
 
-EXPOSE 8501
+ENV PORT=7860
+EXPOSE 7860
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8501"]
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-7860}"]

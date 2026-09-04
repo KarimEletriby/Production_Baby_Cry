@@ -19,6 +19,7 @@ class Metrics:
         self.acoustic_rejections = 0 
         self.inference_errors = 0
         self.rate_limit_hits = 0
+        self.auth_failures = 0
         self.total_inference_time_ms = 0.0
         self.class_predictions: Dict[str, int] = {}
 
@@ -48,6 +49,7 @@ class Metrics:
                 "acoustic_rejections": self.acoustic_rejections,
                 "inference_errors": self.inference_errors,
                 "rate_limit_hits": self.rate_limit_hits,
+                "auth_failures": self.auth_failures,
                 "avg_inference_ms": round(avg_inference, 1),
                 "class_predictions": dict(self.class_predictions),
             }

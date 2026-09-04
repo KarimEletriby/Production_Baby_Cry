@@ -1,3 +1,9 @@
+---
+title: Baby Cry Classifier API
+sdk: docker
+app_port: 7860
+---
+
 # Baby Cry Classifier — Backend Package v1.0
 
 ## What's in this package

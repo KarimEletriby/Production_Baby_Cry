@@ -3,7 +3,10 @@ services:
     build: .
     container_name: babycry_api
     ports:
-      - "8501:8501"
+      - "7860:7860"
     restart: always
     environment:
       - ENV=production
+      - API_KEY=${API_KEY}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - INFERENCE_TIMEOUT_S=30

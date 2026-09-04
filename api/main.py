@@ -11,12 +11,21 @@ Improvements over Phase 0:
   ✅ Graceful error handling
   ✅ Model warm-up on startup
   ✅ Inference time tracking
+
+Phase 1 hardening:
+  ✅ CORS restricted to configured origins
+  ✅ API key authentication
+  ✅ Lifespan context manager (replaces deprecated on_event)
+  ✅ Inference timeout (30s default)
+  ✅ Enhanced low-confidence warnings for burping class
 """
+import asyncio
 import io
 import os
 import sys
 import time
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -48,43 +57,37 @@ from api.acoustic_checks import acoustic_sanity_check
 
 
 # =========================================================
-# Setup
+# Configuration
 # =========================================================
 ENV = os.getenv("ENV", "development")
 logger = configure_logging(env=ENV)
 
-app = FastAPI(
-    title="Baby Cry Classifier API — صنف بكاء طفلك",
-    description="واجهة برمجية لتصنيف بكاء الأطفال باستخدام الذكاء الاصطناعي",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
+# CORS — restricted to configured origins (comma-separated env var)
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://localhost:8080",
+).split(",")
 
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# API Key authentication — set API_KEY env var to enable
+API_KEY = os.getenv("API_KEY", None)
 
-# Rate limiting
-app.state.limiter = limiter
-app.add_middleware(SlowAPIMiddleware)
-app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+# Inference timeout in seconds
+INFERENCE_TIMEOUT_S = int(os.getenv("INFERENCE_TIMEOUT_S", "30"))
+
+# Paths to skip authentication (always public)
+PUBLIC_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
 
 # =========================================================
-# Model loading + warm-up
+# Model loading + warm-up (lifespan)
 # =========================================================
 PROJECT_DIR = Path(__file__).parent.parent
 classifier: BabyCryClassifier = None  # type: ignore
 
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load models on startup, clean up on shutdown."""
     global classifier
     logger.info("server_starting", env=ENV)
 
@@ -112,6 +115,73 @@ async def startup_event():
         logger.error("warmup_failed", error=str(e), exc_info=True)
 
     logger.info("server_ready", device=device)
+
+    yield  # App is running
+
+    # Shutdown
+    logger.info("server_shutting_down")
+    classifier = None
+
+
+# =========================================================
+# App setup
+# =========================================================
+app = FastAPI(
+    title="Baby Cry Classifier API — صنف بكاء طفلك",
+    description="واجهة برمجية لتصنيف بكاء الأطفال باستخدام الذكاء الاصطناعي",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# CORS — restricted to configured origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Rate limiting
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+
+# =========================================================
+# API Key Authentication Middleware
+# =========================================================
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    """
+    Check for valid API key in X-API-Key header.
+    Skips authentication for public paths and when API_KEY is not configured.
+    """
+    # Skip if no API key is configured (development mode)
+    if API_KEY is None:
+        return await call_next(request)
+
+    # Skip public endpoints
+    if request.url.path in PUBLIC_PATHS:
+        return await call_next(request)
+
+    # Check API key
+    provided_key = request.headers.get("X-API-Key", "")
+    if provided_key != API_KEY:
+        metrics.inc("auth_failures")
+        return JSONResponse(
+            status_code=401,
+            content={
+                "success": False,
+                "error_code": "UNAUTHORIZED",
+                "error_message_ar": "مفتاح API غير صالح أو مفقود. أضف الـ header: X-API-Key",
+                "error_message_en": "Invalid or missing API key. Provide X-API-Key header.",
+            },
+        )
+
+    return await call_next(request)
 
 
 # =========================================================
@@ -267,12 +337,29 @@ async def predict(
             },
         )
 
-    # ---- 3. Run inference ----
+    # ---- 3. Run inference with timeout ----
     t_infer = time.time()
     try:
-        result = classifier.predict((sr, wav))
+        loop = asyncio.get_event_loop()
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, classifier.predict, (sr, wav)),
+            timeout=INFERENCE_TIMEOUT_S,
+        )
         inference_ms = (time.time() - t_infer) * 1000
         metrics.add_inference_time(inference_ms)
+    except asyncio.TimeoutError:
+        metrics.inc("inference_errors")
+        log.error("inference_timeout", timeout_s=INFERENCE_TIMEOUT_S)
+        return JSONResponse(
+            status_code=504,
+            content={
+                "success": False,
+                "request_id": request_id,
+                "error_code": "INFERENCE_TIMEOUT",
+                "error_message_ar": f"تجاوز وقت التحليل الحد المسموح ({INFERENCE_TIMEOUT_S} ثانية). حاول مرة أخرى.",
+                "error_message_en": f"Inference timed out after {INFERENCE_TIMEOUT_S}s.",
+            },
+        )
     except Exception as e:
         metrics.inc("inference_errors")
         log.error("inference_failed", error=str(e), exc_info=True)
@@ -306,6 +393,10 @@ async def predict(
         s2_label = result["stage2_prediction"]
         s2_conf = result["stage2_confidence"]
         s2_content = STAGE2_CONTENT[s2_label]
+
+        # Enhanced confidence advice — extra warning for burping class
+        advice = confidence_advice_ar(s2_conf, cry_type=s2_label)
+
         stage2 = Stage2Result(
             type=s2_label,
             emoji=s2_content["emoji"],
@@ -316,7 +407,7 @@ async def predict(
             warning_ar=s2_content["warning_ar"],
             confidence=s2_conf,
             confidence_label_ar=confidence_label_ar(s2_conf),
-            confidence_advice_ar=confidence_advice_ar(s2_conf),
+            confidence_advice_ar=advice,
             all_probabilities=result["stage2_all_probs"],
         )
         metrics.record_prediction(s2_label)

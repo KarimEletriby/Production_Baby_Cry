@@ -165,11 +165,30 @@ def confidence_label_ar(confidence: float) -> str:
         return "غير متأكد"
 
 
-def confidence_advice_ar(confidence: float) -> str:
-    """Extra advice based on confidence level."""
+def confidence_advice_ar(confidence: float, cry_type: str = "") -> str:
+    """
+    Extra advice based on confidence level and cry type.
+    Provides enhanced warnings for types with known lower accuracy (e.g., burping).
+    """
+    parts = []
+
+    # Burping class has low F1 (0.54) — always warn
+    if cry_type == "burping":
+        parts.append(
+            "ℹ️ ملاحظة: تصنيف 'حاجة للتجشؤ' أقل دقة من الأنواع الأخرى. "
+            "اعتمدي أيضاً على ملاحظتك لطفلك (هل أكل مؤخراً؟ هل البكاء بعد الرضاعة؟)."
+        )
+
+    # Low confidence warning
     if confidence < 0.55:
-        return (
+        parts.append(
             "⚠️ التطبيق غير متأكد تماماً من النوع. "
             "قد يكون من الأفضل تجربة تسجيل آخر أو الاعتماد على ملاحظتك المباشرة لطفلك."
         )
-    return ""
+    elif confidence < 0.70:
+        parts.append(
+            "💡 مستوى الثقة متوسط. النتيجة قد تكون صحيحة لكن يُفضل مراقبة الطفل "
+            "والتأكد من العلامات الجسدية المذكورة."
+        )
+
+    return "\n".join(parts)
